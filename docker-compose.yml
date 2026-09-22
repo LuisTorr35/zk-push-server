@@ -1,0 +1,57 @@
+services:
+  app:
+    build:
+      context: .
+      target: build
+    command: npm run start:dev
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://zk:zk@postgres:5432/zk_push?schema=public
+      PHOTO_STORAGE: ${PHOTO_STORAGE:-db}
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: zk-photos
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./src:/app/src
+      - ./test:/app/test
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: zk
+      POSTGRES_PASSWORD: zk
+      POSTGRES_DB: zk_push
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zk -d zk_push"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Local S3 so PHOTO_STORAGE=s3 can be tried without a cloud account.
+  # Web console: http://localhost:9001 (minioadmin / minioadmin)
+  minio:
+    image: quay.io/minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+volumes:
+  pgdata:
+  miniodata:
