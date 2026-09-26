@@ -1,0 +1,2 @@
+# Protocol fixtures: keep exact bytes (tabs, CRLF, no trailing newline fixes)
+test/fixtures/** -text

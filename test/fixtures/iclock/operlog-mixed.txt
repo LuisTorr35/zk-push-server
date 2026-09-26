@@ -1,0 +1,5 @@
+OPLOG 4	0	2026-09-25 06:00:02	0	0	0	0
+OPLOG 6	0	2026-09-25 06:05:11	admin	0	0	0
+USER PIN=1001	Name=John Doe	Pri=0	Passwd=	Card=	Grp=1	TZ=0	Verify=-1	ViceCard=	StartDatetime=0	EndDatetime=0
+BIOPHOTO PIN=1001	FileName=1001.jpg	Type=9	Size=12	Content=ZmFrZS1waG90bw==
+USERPIC PIN=1001	FileName=1001.jpg	Size=12	Content=ZmFrZS1waG90bw==

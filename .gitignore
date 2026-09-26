@@ -10,3 +10,5 @@ coverage/
 .vscode/*
 !.vscode/extensions.json
 storage/
+
+CLAUDE.md
