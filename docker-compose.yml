@@ -18,6 +18,8 @@ services:
     volumes:
       - ./src:/app/src
       - ./test:/app/test
+      # Migrations are created inside the container but must land in the repo
+      - ./prisma:/app/prisma
     depends_on:
       postgres:
         condition: service_healthy
