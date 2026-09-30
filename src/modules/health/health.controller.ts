@@ -2,8 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 
 /**
  * Liveness probe. Used by Docker, load balancers and monitoring to tell whether
- * the process is responding. It does not touch the database yet: that arrives
- * in phase 3, once Prisma exists.
+ * the process is responding.
  */
 @Controller('health')
 export class HealthController {
