@@ -12,6 +12,7 @@ export const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
 
   DATABASE_URL: z.string().url(),
+  COMMAND_ACK_TIMEOUT_SECONDS: z.coerce.number().int().positive().max(86400).default(60),
 
   /** Where photos are stored: in the database or in an S3 bucket. */
   PHOTO_STORAGE: z.enum(['db', 's3']).default('db'),
@@ -41,8 +42,9 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   const env = parsed.data;
 
   if (env.PHOTO_STORAGE === 's3') {
-    const missing = (['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY', 'S3_SECRET_KEY'] as const)
-      .filter((key) => !env[key]);
+    const missing = (
+      ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY', 'S3_SECRET_KEY'] as const
+    ).filter((key) => !env[key]);
 
     if (missing.length > 0) {
       throw new Error(`PHOTO_STORAGE=s3 requires: ${missing.join(', ')}`);

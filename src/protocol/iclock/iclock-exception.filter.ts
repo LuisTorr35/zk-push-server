@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { DeviceDisabledError } from '../../modules/devices/device-disabled.error';
 
 @Catch()
 export class IclockExceptionFilter implements ExceptionFilter {
@@ -13,7 +14,12 @@ export class IclockExceptionFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
-    const status = exception instanceof HttpException ? exception.getStatus() : 500;
+    const status =
+      exception instanceof DeviceDisabledError
+        ? 403
+        : exception instanceof HttpException
+          ? exception.getStatus()
+          : 500;
     if (status >= 500)
       this.logger.error(
         'Iclock request failed',
@@ -23,11 +29,13 @@ export class IclockExceptionFilter implements ExceptionFilter {
       .status(status)
       .type('text/plain')
       .send(
-        status >= 500
-          ? 'ERROR'
-          : exception instanceof HttpException
-            ? exception.message
-            : 'ERROR',
+        exception instanceof DeviceDisabledError
+          ? exception.message
+          : status >= 500
+            ? 'ERROR'
+            : exception instanceof HttpException
+              ? exception.message
+              : 'ERROR',
       );
   }
 }

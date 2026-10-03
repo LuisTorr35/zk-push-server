@@ -7,14 +7,14 @@ export class AttendanceService {
   constructor(private readonly repository: AttendanceRepository) {}
 
   async saveBatch(
-    deviceSn: string,
+    deviceId: number,
     records: readonly AttendanceRecord[],
   ): Promise<AttendanceBatchResult> {
     if (records.length === 0) {
       return { created: 0, duplicates: 0 };
     }
 
-    const created = await this.repository.insertBatch(deviceSn, records);
+    const created = await this.repository.insertBatch(deviceId, records);
     return { created, duplicates: records.length - created };
   }
 }

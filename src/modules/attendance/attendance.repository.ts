@@ -7,11 +7,11 @@ export class AttendanceRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async insertBatch(
-    deviceSn: string,
+    deviceId: number,
     records: readonly AttendanceRecord[],
   ): Promise<number> {
     const result = await this.prisma.attendanceLog.createMany({
-      data: records.map((record) => ({ ...record, deviceSn })),
+      data: records.map((record) => ({ ...record, deviceId })),
       skipDuplicates: true,
     });
 

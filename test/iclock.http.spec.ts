@@ -2,17 +2,24 @@ import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { IclockModule } from '../src/protocol/iclock/iclock.module';
 import { PrismaService } from '../src/shared/prisma/prisma.service';
+import { CommandsService } from '../src/modules/commands/commands.service';
 
 describe('Iclock HTTP', () => {
   let app: NestExpressApplication;
   let baseUrl: string;
   const createMany = jest.fn();
+  const upsert = jest.fn();
+  const update = jest.fn();
+  const next = jest.fn();
+  const respond = jest.fn();
   const line = '1001\t2026-09-25 08:03:12\t0\t15';
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [IclockModule] })
       .overrideProvider(PrismaService)
-      .useValue({ attendanceLog: { createMany } })
+      .useValue({ attendanceLog: { createMany }, device: { upsert, update } })
+      .overrideProvider(CommandsService)
+      .useValue({ next, respond })
       .compile();
     app = module.createNestApplication<NestExpressApplication>({ logger: false });
     app.useBodyParser('text', { type: () => true, limit: '25mb' });
@@ -21,7 +28,15 @@ describe('Iclock HTTP', () => {
   });
 
   beforeEach(() => {
+    next.mockReset();
+    respond.mockReset();
+    next.mockResolvedValue(null);
+    respond.mockResolvedValue(undefined);
     createMany.mockReset();
+    upsert.mockReset();
+    update.mockReset();
+    upsert.mockResolvedValue({ id: 1, sn: 'ABC1234567890', enabled: true });
+    update.mockResolvedValue({ id: 1 });
     createMany.mockResolvedValue({ count: 1 });
   });
 
@@ -75,7 +90,7 @@ describe('Iclock HTTP', () => {
     expect(createMany).toHaveBeenCalledWith({
       data: [
         {
-          deviceSn: 'ABC1234567890',
+          deviceId: 1,
           pin: '1001',
           localTime: new Date('2026-09-25T08:03:12Z'),
           status: 0,
@@ -150,4 +165,103 @@ describe('Iclock HTTP', () => {
     expect(response.headers.get('content-type')).toContain('text/plain');
     expect(await response.text()).toBe('ERROR');
   });
+  it.each([
+    ['GET', 'cdata', ''],
+    ['POST', 'cdata', '&table=ATTLOG'],
+    ['POST', 'cdata', '&table=OPTIONS'],
+    ['GET', 'getrequest', ''],
+    ['POST', 'devicecmd', ''],
+  ])('rejects a disabled device at %s %s %s', async (method, endpoint, query) => {
+    upsert.mockResolvedValue({ id: 1, enabled: false });
+    const response = await fetch(
+      `${baseUrl}/iclock/${endpoint}?SN=ABC1234567890${query}`,
+      {
+        method,
+        ...(method === 'POST' ? { body: line } : {}),
+      },
+    );
+    expect(response.status).toBe(403);
+    expect(response.headers.get('content-type')).toContain('text/plain');
+    expect(await response.text()).toBe('DEVICE DISABLED');
+    expect(createMany).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+    expect(respond).not.toHaveBeenCalled();
+  });
+
+  it('registers device connections without altering their enabled flag', async () => {
+    await fetch(`${baseUrl}/iclock/cdata?SN=ABC1234567890`);
+    expect(upsert).toHaveBeenCalledWith({
+      where: { sn: 'ABC1234567890' },
+      create: {
+        sn: 'ABC1234567890',
+        name: 'Device ABC1234567890',
+        ip: '127.0.0.1',
+        lastSeenAt: expect.any(Date),
+      },
+      update: { ip: '127.0.0.1', lastSeenAt: expect.any(Date) },
+    });
+  });
+
+  it('updates OPTIONS metadata without creating attendance rows', async () => {
+    const response = await fetch(
+      `${baseUrl}/iclock/cdata?SN=ABC1234567890&table=OPTIONS`,
+      {
+        method: 'POST',
+        body: '~DeviceName=Example Device,FWVersion=1.0\r\nUserCount=0\r\nFaceCount=12',
+      },
+    );
+    expect(await response.text()).toBe('OK: 1');
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: {
+        model: 'Example Device',
+        firmware: '1.0',
+        userCount: 0,
+        faceCount: 12,
+      },
+    });
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 if registering the device fails', async () => {
+    upsert.mockRejectedValue(new Error('database unavailable'));
+    const response = await fetch(`${baseUrl}/iclock/cdata?SN=ABC1234567890`);
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe('ERROR');
+  });
+  it('returns an attempt ID and command payload from getrequest', async () => {
+    next.mockResolvedValue({ id: 17, commandId: 9, payload: 'DATA QUERY USERINFO' });
+    const response = await fetch(`${baseUrl}/iclock/getrequest?SN=ABC1234567890`);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('C:17:DATA QUERY USERINFO');
+    expect(next).toHaveBeenCalledWith(1);
+  });
+
+  it('passes valid result lines to the queue before acknowledging the batch', async () => {
+    const response = await fetch(`${baseUrl}/iclock/devicecmd?SN=ABC1234567890`, {
+      method: 'POST',
+      body: 'ID=17&Return=0&CMD=DATA\r\nbroken\r\nID=18&Return=-1004',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('OK');
+    expect(respond).toHaveBeenCalledWith(1, [
+      { id: 17, returnCode: 0 },
+      { id: 18, returnCode: -1004 },
+    ]);
+  });
+
+  it.each(['getrequest', 'devicecmd'])(
+    'returns 500 if the queue fails at %s',
+    async (endpoint) => {
+      next.mockRejectedValue(new Error('database unavailable'));
+      respond.mockRejectedValue(new Error('database unavailable'));
+      const response = await fetch(`${baseUrl}/iclock/${endpoint}?SN=ABC1234567890`, {
+        method: endpoint === 'devicecmd' ? 'POST' : 'GET',
+      });
+      expect(response.status).toBe(500);
+      expect(await response.text()).toBe('ERROR');
+    },
+  );
 });

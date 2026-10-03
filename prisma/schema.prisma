@@ -10,9 +10,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Device {
+  id             Int             @id @default(autoincrement())
+  sn             String          @unique
+  name           String
+  enabled        Boolean         @default(true)
+  model          String?
+  firmware       String?
+  ip             String?
+  lastSeenAt     DateTime?       @db.Timestamptz(3)
+  userCount      Int?
+  faceCount      Int?
+  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(3)
+  attendanceLogs AttendanceLog[]
+  commands       Command[]
+}
+
 model AttendanceLog {
   id         Int      @id @default(autoincrement())
-  deviceSn   String
+  deviceId   Int
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   pin        String
   localTime  DateTime // Terminal Time
   status     Int
@@ -20,6 +38,47 @@ model AttendanceLog {
   raw        String
   receivedAt DateTime @default(now())
 
-  @@unique([deviceSn, pin, localTime])
+  @@unique([deviceId, pin, localTime])
+  @@index([deviceId, localTime])
   @@index([pin])
+}
+
+enum CommandStatus {
+  pending
+  sent
+  confirmed
+  failed
+}
+
+model Command {
+  id          Int              @id @default(autoincrement())
+  deviceId    Int
+  device      Device           @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  type        String
+  payload     String
+  status      CommandStatus    @default(pending)
+  priority    Int              @default(0)
+  attempts    Int              @default(0)
+  maxAttempts Int              @default(5)
+  dedupeKey   String?
+  returnCode  Int?
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+  sentAt      DateTime?        @db.Timestamptz(3)
+  respondedAt DateTime?        @db.Timestamptz(3)
+  deliveries  CommandAttempt[]
+
+  @@index([deviceId, status, priority(sort: Desc), createdAt, id])
+}
+
+model CommandAttempt {
+  id          Int       @id @default(autoincrement())
+  commandId   Int
+  command     Command   @relation(fields: [commandId], references: [id], onDelete: Restrict)
+  number      Int
+  sentAt      DateTime  @db.Timestamptz(3)
+  expiresAt   DateTime  @db.Timestamptz(3)
+  respondedAt DateTime? @db.Timestamptz(3)
+  returnCode  Int?
+
+  @@unique([commandId, number])
 }
