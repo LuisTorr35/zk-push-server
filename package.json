@@ -10,7 +10,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "test": "jest",
-    "test:integration": "ts-node test/attendance.integration.ts",
+    "test:integration": "ts-node test/attendance.integration.ts && ts-node test/commands.integration.ts",
     "test:watch": "jest --watch",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "prisma:migrate": "prisma migrate dev",
