@@ -59,4 +59,34 @@ describe('parseAttlog', () => {
   it('returns empty lists for an empty body', () => {
     expect(parseAttlog('')).toEqual({ records: [], rejected: [] });
   });
+
+  it.each(['2026-02-31', '2026-04-31', '2025-02-29', '0000-01-01'])(
+    'rejects impossible calendar date %s',
+    (date) => {
+      const result = parseAttlog(`1001\t${date} 08:03:12\t0\t15`);
+      expect(result.records).toHaveLength(0);
+      expect(result.rejected[0].reason).toBe('invalid date');
+    },
+  );
+
+  it('accepts a leap day in a leap year', () => {
+    expect(parseAttlog('1001\t2024-02-29 08:03:12\t0\t15').records).toHaveLength(1);
+  });
+
+  it.each(['', ' ', '-1', '1.5', '1e2', '2147483648'])(
+    'rejects invalid status and verification value %j',
+    (value) => {
+      for (const fields of [`${value}\t15`, `0\t${value}`]) {
+        const result = parseAttlog(`1001\t2026-09-25 08:03:12\t${fields}`);
+        expect(result.records).toHaveLength(0);
+        expect(result.rejected[0].reason).toBe('invalid status/verify');
+      }
+    },
+  );
+
+  it('rejects missing numeric columns', () => {
+    expect(parseAttlog('1001\t2026-09-25 08:03:12\t0').rejected[0].reason).toBe(
+      'invalid status/verify',
+    );
+  });
 });

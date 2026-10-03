@@ -1,46 +1,52 @@
-import { Body, Controller, Get, Header, HttpCode, Logger, Post, Query } from '@nestjs/common';
-import { parseAttlog } from './attlog.parser';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  Post,
+  Query,
+  UseFilters,
+} from '@nestjs/common';
 import { buildHandshake } from './handshake';
+import { DeviceSnPipe } from './device-sn.pipe';
+import { IclockExceptionFilter } from './iclock-exception.filter';
+import { IclockService } from './iclock.service';
 
 /**
  * ZKTeco ADMS / PUSH endpoints. The terminal always starts the conversation;
  * the server never calls it. Every response is plain text, not JSON.
  */
 @Controller('iclock')
+@UseFilters(IclockExceptionFilter)
 export class IclockController {
-  private readonly logger = new Logger(IclockController.name);
+  constructor(private readonly iclock: IclockService) {}
 
   @Get('cdata')
   @Header('Content-Type', 'text/plain')
-  handshake(@Query('SN') sn: string) {
+  handshake(@Query('SN', DeviceSnPipe) sn: string) {
     return buildHandshake(sn);
   }
 
   @Post('cdata')
   @HttpCode(200) // Nest defaults POST to 201; terminals expect 200
   @Header('Content-Type', 'text/plain')
-  upload(@Query('SN') sn: string, @Query('table') table: string, @Body() body: string) {
-    // Other tables are acknowledged but not processed yet. Replying OK matters:
-    // otherwise the terminal keeps resending the same batch.
-    if (table !== 'ATTLOG') {
-      return 'OK';
-    }
-
-    // Express hands over {} instead of '' when the request has no body.
-    const text = typeof body === 'string' ? body : '';
-    const result = parseAttlog(text);
-
-    this.logger.log(`ATTLOG SN=${sn} ok=${result.records.length} rejected=${result.rejected.length}`);
-    if (result.rejected.length > 0) {
-      this.logger.warn(`ATTLOG SN=${sn} rejected: ${result.rejected.map((r) => r.reason).join(', ')}`);
-    }
-    return 'OK';
+  upload(
+    @Query('SN', DeviceSnPipe) sn: string,
+    @Query('table') table: unknown,
+    @Body() body: unknown,
+  ) {
+    return this.iclock.upload(
+      sn,
+      typeof table === 'string' ? table : '',
+      typeof body === 'string' ? body : '',
+    );
   }
 
   // No command queue yet (phase 4): always "nothing pending".
   @Get('getrequest')
   @Header('Content-Type', 'text/plain')
-  getRequest() {
+  getRequest(@Query('SN', DeviceSnPipe) _sn: string) {
     return 'OK';
   }
 
@@ -48,7 +54,7 @@ export class IclockController {
   @Post('devicecmd')
   @HttpCode(200)
   @Header('Content-Type', 'text/plain')
-  postDevice() {
+  postDevice(@Query('SN', DeviceSnPipe) _sn: string) {
     return 'OK';
   }
 }
