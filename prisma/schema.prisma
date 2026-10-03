@@ -9,3 +9,17 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model AttendanceLog {
+  id         Int      @id @default(autoincrement())
+  deviceSn   String
+  pin        String
+  localTime  DateTime // Terminal Time
+  status     Int
+  verifyType Int
+  raw        String
+  receivedAt DateTime @default(now())
+
+  @@unique([deviceSn, pin, localTime])
+  @@index([pin])
+}
