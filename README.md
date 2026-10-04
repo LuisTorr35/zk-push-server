@@ -5,15 +5,14 @@ protocol (`/iclock/*`). It receives attendance punches, manages a command queue
 towards the devices (enroll, delete users) and notifies your application through
 webhooks.
 
-> Status: work in progress (phase 6 — attendance and command webhooks).
-
 ## Why
 
 ZK terminals running ADMS do not wait for the server to call them: **they call
 the server** every few seconds over plain HTTP. Most public examples only
-*receive* punches. This project covers the whole protocol:
+*receive* punches. This project currently supports:
 
-- Attendance (`ATTLOG`), operation logs (`OPERLOG`) and photo uploads.
+- Attendance (`ATTLOG`) and device metadata (`OPTIONS`).
+- Other incoming tables are acknowledged without persisting operation logs or terminal photos.
 - Command queue with priorities, retries and device acknowledgements.
 - Enrollment with photos stored in the database or S3-compatible storage;
   base64 is assembled when delivering a BIOPHOTO command.
@@ -33,10 +32,17 @@ ZK terminal ──HTTP /iclock/*──▶ zk-push-server ──webhook──▶ 
                     Your app ──REST──┘  (enroll, delete, query)
 ```
 
+On a VPS, route incoming `/iclock/*` requests through the public proxy to this
+application, preserving the path and `SN` query parameter. The terminal's first
+handshake reaches the application, which registers the device and returns its
+plain-text configuration through the proxy. Configure the terminal with the
+VPS's reachable address and public port. See the
+[VPS first-contact example](docs/protocol/device-setup.md#vps-example-route-the-first-contact-to-the-application).
+
 | The terminal says | Endpoint | The server |
 |---|---|---|
 | "Hello, I am SN X" | `GET /iclock/cdata` | Registers the device and returns its configuration |
-| "This happened" | `POST /iclock/cdata?table=...` | Processes punches, operation logs and photos |
+| "This happened" | `POST /iclock/cdata?table=...` | Processes ATTLOG/OPTIONS and acknowledges other tables |
 | "Anything for me?" | `GET /iclock/getrequest` | Hands over the next queued command, or `OK` |
 | "Command done" | `POST /iclock/devicecmd` | Marks the command confirmed, or schedules a retry |
 
@@ -82,15 +88,25 @@ test/fixtures/         sample payloads (anonymized)
 tools/simulator/       simulated terminal
 ```
 
-## Roadmap
+## Simulator and protocol guides
 
-- [x] Phase 1 — NestJS skeleton + Docker Compose (Postgres, MinIO) + health check
-- [x] Phase 2 — Protocol: handshake, getrequest, ATTLOG + parser with tests
-- [x] Phase 3 — Devices with automatic registration and enable/disable control
-- [x] Phase 4 — Command queue
-- [x] Phase 5 — Persons API: enroll and delete
-- [x] Phase 6 — Webhooks with outbox
-- [ ] Phase 7 — Simulator, protocol docs and CI
+Run a synthetic terminal through the current server's protocol:
+
+```bash
+docker compose build app
+docker compose up -d app
+docker compose exec app npm run simulate -- --scenario smoke --repeat 2 --polls 1
+docker compose exec app npm run simulate -- --scenario poll --watch
+```
+
+The simulator sends real requests, accepts queued commands and returns simulated
+success/error ACKs or withholds them to test timeouts. It logs attempt IDs rather
+than payloads/photos and preserves its manually created records. It does not
+maintain terminal profiles or emulate recognition. Use `--help` for options.
+
+- [Protocol reference](docs/protocol/README.md): routes, wire formats and implemented tables.
+- [Physical terminal setup](docs/protocol/device-setup.md): ADMS address/port and proxy routing.
+- [Simulator walkthrough](docs/protocol/simulator.md): attendance, duplicate batches, enrollment, deletion, errors and timeouts.
 
 ## Devices
 
@@ -469,6 +485,11 @@ duplicate responses, transaction rollback, and recovery after restarting the app
 Persons tests exercise all three storage modes against real PostgreSQL/MinIO,
 fallback and compensation, API authentication/limits, atomic concurrent
 operations, frozen snapshots, dependencies, and disablement during preparation.
+Simulator integration launches the actual CLI and checks registration, replay,
+profile commands, error/timeout exhaustion, SIGINT, and signed event delivery.
+Run it with `npx ts-node test/simulator.integration.ts` under the same test
+configuration; `npm run test:integration` includes all five integration scripts.
+Formatting and TypeScript checks also include `tools/**/*.ts`.
 
 ## License
 
