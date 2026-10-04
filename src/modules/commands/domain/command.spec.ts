@@ -12,6 +12,21 @@ const pending = (): CommandState => ({
 });
 
 describe('Command domain', () => {
+  it('fails a pending prerequisite without recording a delivery', () => {
+    const command = new Command(pending());
+    expect(command.failBeforeSend()).toBe(true);
+    expect(command.snapshot).toMatchObject({ status: 'failed', attempts: 0 });
+    expect(command.failBeforeSend()).toBe(false);
+    expect(() => command.send(start)).toThrow();
+  });
+
+  it('does not fail an active delivery before its response or timeout', () => {
+    const command = new Command(pending());
+    command.send(start);
+    expect(command.failBeforeSend()).toBe(false);
+    command.respond(1, 0, later);
+    expect(command.failBeforeSend()).toBe(false);
+  });
   it('counts a send and waits until the exact deadline before recovering', () => {
     const command = new Command(pending());
     command.send(start);

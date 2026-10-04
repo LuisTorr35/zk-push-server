@@ -4,7 +4,9 @@ export type CommandRecord = CommandState & {
   id: number;
   deviceId: number;
   type: string;
-  payload: string;
+  payload: string | null;
+  photoId?: string | null;
+  profileSnapshot?: unknown;
   priority: number;
   dedupeKey: string | null;
   createdAt: Date;

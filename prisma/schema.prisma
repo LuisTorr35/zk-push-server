@@ -51,23 +51,84 @@ enum CommandStatus {
 }
 
 model Command {
-  id          Int              @id @default(autoincrement())
-  deviceId    Int
-  device      Device           @relation(fields: [deviceId], references: [id], onDelete: Restrict)
-  type        String
-  payload     String
-  status      CommandStatus    @default(pending)
-  priority    Int              @default(0)
-  attempts    Int              @default(0)
-  maxAttempts Int              @default(5)
-  dedupeKey   String?
-  returnCode  Int?
-  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
-  sentAt      DateTime?        @db.Timestamptz(3)
-  respondedAt DateTime?        @db.Timestamptz(3)
-  deliveries  CommandAttempt[]
+  id              Int              @id @default(autoincrement())
+  deviceId        Int
+  device          Device           @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  type            String
+  payload         String?
+  personId        Int?
+  person          Person?          @relation(fields: [personId], references: [id], onDelete: Restrict)
+  photoId         String?
+  photo           Photo?           @relation(fields: [photoId], references: [id], onDelete: Restrict)
+  operationId     String?
+  operation       PersonOperation? @relation(fields: [operationId], references: [id], onDelete: Restrict)
+  predecessorId   Int?
+  predecessor     Command?         @relation("CommandDependency", fields: [predecessorId], references: [id], onDelete: Restrict)
+  dependents      Command[]        @relation("CommandDependency")
+  dependencyMode  String?
+  profileSnapshot Json?
+  failureReason   String?
+  status          CommandStatus    @default(pending)
+  priority        Int              @default(0)
+  attempts        Int              @default(0)
+  maxAttempts     Int              @default(5)
+  dedupeKey       String?
+  returnCode      Int?
+  createdAt       DateTime         @default(now()) @db.Timestamptz(3)
+  sentAt          DateTime?        @db.Timestamptz(3)
+  respondedAt     DateTime?        @db.Timestamptz(3)
+  deliveries      CommandAttempt[]
 
   @@index([deviceId, status, priority(sort: Desc), createdAt, id])
+  @@index([personId, deviceId, status])
+  @@index([operationId])
+}
+
+enum PhotoStorageMode {
+  both
+  s3
+  db
+}
+
+model Person {
+  id         Int               @id @default(autoincrement())
+  pin        String            @unique
+  name       String
+  externalId String?
+  version    Int               @default(1)
+  photoId    String?
+  photo      Photo?            @relation("CurrentPhoto", fields: [photoId], references: [id], onDelete: Restrict)
+  createdAt  DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime          @updatedAt @db.Timestamptz(3)
+  operations PersonOperation[]
+  commands   Command[]
+}
+
+model Photo {
+  id          String           @id
+  mode        PhotoStorageMode
+  s3Bucket    String?
+  s3Key       String?
+  bytes       Bytes?
+  contentType String
+  size        Int
+  hash        String
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+  persons     Person[]         @relation("CurrentPhoto")
+  commands    Command[]
+}
+
+model PersonOperation {
+  id        String    @id @default(uuid())
+  personId  Int
+  person    Person    @relation(fields: [personId], references: [id], onDelete: Restrict)
+  action    String
+  version   Int
+  deviceSns String[]
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  commands  Command[]
+
+  @@index([personId, createdAt])
 }
 
 model CommandAttempt {

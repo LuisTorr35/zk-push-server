@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { DeviceDisabledError } from '../devices/device-disabled.error';
 import { CommandInputError } from './command-input.error';
+import { dependencyState } from './domain/command-dependency';
+import { Command } from './domain/command';
 import type { CommandsRepository, CommandsTransaction } from './commands.repository';
 
 @Injectable()
@@ -35,11 +37,43 @@ export class PrismaCommandsRepository implements CommandsRepository {
             },
           }),
         findSent: () => tx.command.findFirst({ where: { deviceId, status: 'sent' } }),
-        findPending: () =>
-          tx.command.findFirst({
+        findPending: async () => {
+          const pending = await tx.command.findMany({
             where: { deviceId, status: 'pending' },
+            include: { predecessor: { select: { status: true } } },
             orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }],
-          }),
+          });
+          const failed = new Set<number>();
+          for (const candidate of pending) {
+            // Refresh dependency state: an earlier candidate may just have failed.
+            const state = dependencyState(
+              candidate.dependencyMode,
+              candidate.predecessorId && failed.has(candidate.predecessorId)
+                ? 'failed'
+                : (candidate.predecessor?.status ?? null),
+            );
+            if (state === 'ready') return candidate;
+            if (state === 'failed') {
+              const command = new Command(candidate);
+              command.failBeforeSend();
+              await tx.command.update({
+                where: { id: candidate.id },
+                data: { ...command.snapshot, failureReason: 'Predecessor failed' },
+              });
+              failed.add(candidate.id);
+            }
+          }
+          return null;
+        },
+        fail: async (id, reason) => {
+          const record = await tx.command.findUniqueOrThrow({ where: { id } });
+          const command = new Command(record);
+          if (!command.failBeforeSend()) return;
+          await tx.command.update({
+            where: { id },
+            data: { ...command.snapshot, failureReason: reason },
+          });
+        },
         save: async (id, state) => {
           await tx.command.update({ where: { id }, data: state });
         },

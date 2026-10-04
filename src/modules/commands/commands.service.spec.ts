@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { CommandsService } from './commands.service';
 import type { Env } from '../../shared/config/env.schema';
+import { CommandPayloadRenderer } from './command-payload.renderer';
 import type { EnqueueCommand } from './commands.types';
 
 describe('CommandsService input', () => {
@@ -8,6 +9,7 @@ describe('CommandsService input', () => {
   const service = new CommandsService(
     { withDeviceLock: lock },
     new ConfigService<Env, true>({ COMMAND_ACK_TIMEOUT_SECONDS: 60 }),
+    { render: jest.fn() } as unknown as CommandPayloadRenderer,
   );
   const valid: EnqueueCommand = {
     deviceId: 1,

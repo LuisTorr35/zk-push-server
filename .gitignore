@@ -9,6 +9,6 @@ coverage/
 .idea/
 .vscode/*
 !.vscode/extensions.json
-storage/
+/storage/
 
 CLAUDE.md

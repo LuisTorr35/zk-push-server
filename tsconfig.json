@@ -4,6 +4,7 @@
     "target": "ES2023",
     "lib": ["ES2023"],
     "moduleResolution": "node",
+    "esModuleInterop": true,
     "declaration": false,
     "removeComments": true,
     "emitDecoratorMetadata": true,

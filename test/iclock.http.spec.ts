@@ -1,3 +1,4 @@
+import { configureBodyParsers } from '../src/shared/http/body-parsers';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { IclockModule } from '../src/protocol/iclock/iclock.module';
@@ -21,8 +22,11 @@ describe('Iclock HTTP', () => {
       .overrideProvider(CommandsService)
       .useValue({ next, respond })
       .compile();
-    app = module.createNestApplication<NestExpressApplication>({ logger: false });
-    app.useBodyParser('text', { type: () => true, limit: '25mb' });
+    app = module.createNestApplication<NestExpressApplication>({
+      logger: false,
+      bodyParser: false,
+    });
+    configureBodyParsers(app);
     await app.listen(0, '127.0.0.1');
     baseUrl = await app.getUrl();
   });

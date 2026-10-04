@@ -1,3 +1,4 @@
+import { configureBodyParsers } from '../src/shared/http/body-parsers';
 import * as assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
@@ -15,8 +16,11 @@ async function createApp(): Promise<NestExpressApplication> {
     '/zk_push_test',
     'Integration tests require zk_push_test',
   );
-  const app = module.createNestApplication<NestExpressApplication>({ logger: false });
-  app.useBodyParser('text', { type: () => true, limit: '25mb' });
+  const app = module.createNestApplication<NestExpressApplication>({
+    logger: false,
+    bodyParser: false,
+  });
+  configureBodyParsers(app);
   await app.listen(0, '127.0.0.1');
   return app;
 }

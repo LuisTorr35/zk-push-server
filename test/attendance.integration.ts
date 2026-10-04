@@ -1,3 +1,4 @@
+import { configureBodyParsers } from '../src/shared/http/body-parsers';
 import * as assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
@@ -17,8 +18,11 @@ async function main(): Promise<void> {
     'Integration tests require the separate zk_push_test database',
   );
 
-  const app = module.createNestApplication<NestExpressApplication>({ logger: false });
-  app.useBodyParser('text', { type: () => true, limit: '25mb' });
+  const app = module.createNestApplication<NestExpressApplication>({
+    logger: false,
+    bodyParser: false,
+  });
+  configureBodyParsers(app);
   const prisma = app.get(PrismaService);
   const sn = `TEST${randomUUID().replace(/-/g, '')}`;
   const otherSn = `${sn}B`;

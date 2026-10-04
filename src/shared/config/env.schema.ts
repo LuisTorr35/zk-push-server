@@ -12,22 +12,30 @@ export const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
 
   DATABASE_URL: z.string().url(),
+  API_KEY: z.string().min(1),
   COMMAND_ACK_TIMEOUT_SECONDS: z.coerce.number().int().positive().max(86400).default(60),
 
-  /** Where photos are stored: in the database or in an S3 bucket. */
-  PHOTO_STORAGE: z.enum(['db', 's3']).default('db'),
+  /** Numeric environment values become named modes for application services. */
+  PHOTO_STORAGE: z
+    .enum(['0', '1', '2'])
+    .default('1')
+    .transform((value) => (({ '0': 'both', '1': 's3', '2': 'db' }) as const)[value]),
   S3_ENDPOINT: z.string().url().optional(),
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY: z.string().optional(),
   S3_SECRET_KEY: z.string().optional(),
+  S3_REGION: z.string().min(1).default('us-east-1'),
+  S3_FORCE_PATH_STYLE: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema>;
 
 /**
  * Validates the environment and returns the typed object consumed by
- * ConfigService. When PHOTO_STORAGE is "s3" the bucket credentials become
- * required as well.
+ * ConfigService. S3-backed modes require bucket credentials.
  */
 export function validateEnv(raw: Record<string, unknown>): Env {
   const parsed = envSchema.safeParse(raw);
@@ -41,15 +49,22 @@ export function validateEnv(raw: Record<string, unknown>): Env {
 
   const env = parsed.data;
 
-  if (env.PHOTO_STORAGE === 's3') {
+  if (env.PHOTO_STORAGE !== 'db') {
     const missing = (
       ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY', 'S3_SECRET_KEY'] as const
     ).filter((key) => !env[key]);
 
     if (missing.length > 0) {
-      throw new Error(`PHOTO_STORAGE=s3 requires: ${missing.join(', ')}`);
+      throw new Error(
+        `PHOTO_STORAGE=${env.PHOTO_STORAGE} requires: ${missing.join(', ')}`,
+      );
     }
   }
 
   return env;
+}
+
+/** Standalone local tooling uses the same validated environment contract. */
+export function loadEnvironment(): Env {
+  return validateEnv(process.env);
 }

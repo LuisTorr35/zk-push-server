@@ -56,6 +56,13 @@ export class Command {
     };
   }
 
+  /** A pending command can fail before delivery when its prerequisites are lost. */
+  failBeforeSend(): boolean {
+    if (this.state.status !== 'pending') return false;
+    this.state.status = 'failed';
+    return true;
+  }
+
   recoverExpired(now: Date, expiresAt: Date): boolean {
     if (this.state.status !== 'sent' || now < expiresAt) return false;
     this.state.status = this.retryStatus();

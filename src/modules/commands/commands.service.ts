@@ -2,6 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../shared/config/env.schema';
 import { COMMANDS_REPOSITORY, type CommandsRepository } from './commands.repository';
+import { CommandPayloadRenderer } from './command-payload.renderer';
+import { PhotoStorageError } from '../../shared/storage/photo-storage.error';
 import { CommandInputError } from './command-input.error';
 import { Command } from './domain/command';
 import type { EnqueueCommand, CommandDelivery, CommandResponse } from './commands.types';
@@ -13,6 +15,7 @@ export class CommandsService {
   constructor(
     @Inject(COMMANDS_REPOSITORY) private readonly repository: CommandsRepository,
     private readonly config: ConfigService<Env, true>,
+    private readonly renderer: CommandPayloadRenderer,
   ) {}
 
   enqueue(input: EnqueueCommand) {
@@ -29,7 +32,7 @@ export class CommandsService {
 
   async next(deviceId: number): Promise<CommandDelivery | null> {
     const timeout = this.config.get('COMMAND_ACK_TIMEOUT_SECONDS', { infer: true });
-    const result = await this.repository.withDeviceLock(deviceId, async (tx) => {
+    const candidate = await this.repository.withDeviceLock(deviceId, async (tx) => {
       const now = new Date();
       const sent = await tx.findSent();
       if (sent) {
@@ -38,8 +41,29 @@ export class CommandsService {
         if (!command.recoverExpired(now, attempt.expiresAt)) return null;
         await tx.save(sent.id, command.snapshot);
       }
+      return tx.findPending();
+    });
+    if (!candidate) return null;
+    let payload: string;
+    try {
+      // Object storage is read before reserving a delivery or holding a device lock.
+      payload = await this.renderer.render(candidate);
+    } catch (error) {
+      if (!(error instanceof PhotoStorageError) || !error.permanent) throw error;
+      await this.repository.withDeviceLock(deviceId, async (tx) => {
+        const pending = await tx.findPending();
+        if (pending?.id === candidate.id) {
+          await tx.fail(candidate.id, 'Photo or payload is unavailable');
+          await tx.findPending();
+        }
+      });
+      return null;
+    }
+    const result = await this.repository.withDeviceLock(deviceId, async (tx) => {
+      if (await tx.findSent()) return null;
       const pending = await tx.findPending();
-      if (!pending) return null;
+      if (pending?.id !== candidate.id) return null;
+      const now = new Date();
       const command = new Command(pending);
       command.send(now);
       await tx.save(pending.id, command.snapshot);
@@ -49,7 +73,7 @@ export class CommandsService {
         now,
         new Date(now.getTime() + timeout * 1000),
       );
-      return { id: attempt.id, commandId: pending.id, payload: pending.payload };
+      return { id: attempt.id, commandId: pending.id, payload };
     });
     if (result)
       this.logger.log(
@@ -103,7 +127,7 @@ export class CommandsService {
       /\b(?:BIOPHOTO|USERPIC|ATTPHOTO)\b/i.test(input.payload)
     ) {
       throw new CommandInputError(
-        'Photo commands require photo storage and are not supported yet',
+        'Photo commands require a typed profile operation and an immutable photo reference',
       );
     }
   }
