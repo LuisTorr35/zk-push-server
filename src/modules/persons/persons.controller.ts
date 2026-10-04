@@ -18,7 +18,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { MAX_UPLOAD_BYTES } from '../../shared/storage/image-processor';
-import { ApiKeyGuard } from './api-key.guard';
+import { ApiKeyGuard } from '../../shared/http/api-key.guard';
 import { PersonsExceptionFilter } from './persons-exception.filter';
 import { PersonsService } from './persons.service';
 import {

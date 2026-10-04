@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Request } from 'express';
-import type { Env } from '../../shared/config/env.schema';
+import type { Env } from '../config/env.schema';
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {

@@ -10,12 +10,14 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "test": "jest",
-    "test:integration": "ts-node test/attendance.integration.ts && ts-node test/commands.integration.ts && ts-node test/persons.integration.ts",
+    "test:integration": "ts-node test/attendance.integration.ts && ts-node test/commands.integration.ts && ts-node test/persons.integration.ts && ts-node test/webhooks.integration.ts",
     "test:watch": "jest --watch",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "worker:dev": "ts-node src/webhook-worker.ts",
+    "worker:prod": "node dist/webhook-worker.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",

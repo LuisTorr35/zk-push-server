@@ -7,6 +7,11 @@ services:
     environment: &app-environment
       NODE_ENV: development
       PORT: 3000
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      WEBHOOK_POLL_INTERVAL_MS: ${WEBHOOK_POLL_INTERVAL_MS:-1000}
+      WEBHOOK_TIMEOUT_MS: ${WEBHOOK_TIMEOUT_MS:-10000}
+      WEBHOOK_MAX_ATTEMPTS: ${WEBHOOK_MAX_ATTEMPTS:-10}
       COMMAND_ACK_TIMEOUT_SECONDS: ${COMMAND_ACK_TIMEOUT_SECONDS:-60}
       DATABASE_URL: postgresql://zk:zk@postgres:5432/zk_push?schema=public
       API_KEY: ${API_KEY:?Set API_KEY in .env}
@@ -27,6 +32,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  webhook-worker:
+    build:
+      context: .
+      target: build
+    command: npm run worker:dev
+    environment: *app-environment
+    volumes:
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 40s
 
   postgres:
     image: postgres:16-alpine
