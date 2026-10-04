@@ -143,3 +143,33 @@ model CommandAttempt {
 
   @@unique([commandId, number])
 }
+
+// Serialized events remain independent of source rows and survive failed delivery.
+enum WebhookStatus {
+  pending
+  sending
+  delivered
+  failed
+}
+
+model WebhookDelivery {
+  id            String        @id @default(uuid())
+  sourceKey     String        @unique
+  type          String
+  body          String
+  status        WebhookStatus @default(pending)
+  attempts      Int           @default(0)
+  maxAttempts   Int
+  nextAttemptAt DateTime      @default(now()) @db.Timestamptz(3)
+  lockToken     String?
+  lockedUntil   DateTime?     @db.Timestamptz(3)
+  lastHttpCode  Int?
+  lastError     String?
+  createdAt     DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime      @updatedAt @db.Timestamptz(3)
+  deliveredAt   DateTime?     @db.Timestamptz(3)
+
+  @@index([status, nextAttemptAt])
+  @@index([status, lockedUntil])
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+}

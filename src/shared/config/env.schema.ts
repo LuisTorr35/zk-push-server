@@ -15,6 +15,28 @@ export const envSchema = z.object({
   API_KEY: z.string().min(1),
   COMMAND_ACK_TIMEOUT_SECONDS: z.coerce.number().int().positive().max(86400).default(60),
 
+  // Empty values pause delivery and suppress creation of new events.
+  WEBHOOK_URL: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .url()
+      .refine((value) => {
+        const url = new URL(value);
+        return (
+          ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
+        );
+      }, 'Expected an HTTP(S) URL without credentials')
+      .optional(),
+  ),
+  WEBHOOK_SECRET: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(1).optional(),
+  ),
+  WEBHOOK_POLL_INTERVAL_MS: z.coerce.number().int().positive().max(60000).default(1000),
+  WEBHOOK_TIMEOUT_MS: z.coerce.number().int().positive().max(30000).default(10000),
+  WEBHOOK_MAX_ATTEMPTS: z.coerce.number().int().positive().max(100).default(10),
+
   /** Numeric environment values become named modes for application services. */
   PHOTO_STORAGE: z
     .enum(['0', '1', '2'])
@@ -48,6 +70,10 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   }
 
   const env = parsed.data;
+
+  if (Boolean(env.WEBHOOK_URL) !== Boolean(env.WEBHOOK_SECRET)) {
+    throw new Error('WEBHOOK_URL and WEBHOOK_SECRET must be configured together');
+  }
 
   if (env.PHOTO_STORAGE !== 'db') {
     const missing = (

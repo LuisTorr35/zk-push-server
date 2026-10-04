@@ -39,7 +39,7 @@ export class CommandsService {
         const attempt = await tx.findAttempt(sent.id, sent.attempts);
         const command = new Command(sent);
         if (!command.recoverExpired(now, attempt.expiresAt)) return null;
-        await tx.save(sent.id, command.snapshot);
+        await tx.save(sent.id, command.snapshot, 'Acknowledgement timeout exhausted');
       }
       return tx.findPending();
     });
@@ -95,7 +95,8 @@ export class CommandsService {
         await tx.recordResponse(attempt.id, response.returnCode, now);
         const command = new Command(attempt.command);
         const changed = command.respond(attempt.number, response.returnCode, now);
-        if (changed) await tx.save(attempt.commandId, command.snapshot);
+        if (changed)
+          await tx.save(attempt.commandId, command.snapshot, 'Device error exhausted');
         results.push(
           `command=${attempt.commandId} attempt=${attempt.id} return=${response.returnCode} status=${command.snapshot.status}`,
         );

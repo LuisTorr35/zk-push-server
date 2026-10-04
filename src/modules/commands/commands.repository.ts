@@ -8,7 +8,7 @@ export interface CommandsTransaction {
   create(input: EnqueueCommand): Promise<CommandRecord>;
   findSent(): Promise<CommandRecord | null>;
   findPending(): Promise<CommandRecord | null>;
-  save(id: number, state: CommandState): Promise<void>;
+  save(id: number, state: CommandState, failureReason?: string): Promise<void>;
   fail(id: number, reason: string): Promise<void>;
   createAttempt(
     commandId: number,

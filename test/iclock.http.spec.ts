@@ -8,7 +8,7 @@ import { CommandsService } from '../src/modules/commands/commands.service';
 describe('Iclock HTTP', () => {
   let app: NestExpressApplication;
   let baseUrl: string;
-  const createMany = jest.fn();
+  const createManyAndReturn = jest.fn();
   const upsert = jest.fn();
   const update = jest.fn();
   const next = jest.fn();
@@ -18,7 +18,11 @@ describe('Iclock HTTP', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [IclockModule] })
       .overrideProvider(PrismaService)
-      .useValue({ attendanceLog: { createMany }, device: { upsert, update } })
+      .useValue({
+        device: { upsert, update },
+        $transaction: (work: (tx: unknown) => unknown) =>
+          work({ attendanceLog: { createManyAndReturn } }),
+      })
       .overrideProvider(CommandsService)
       .useValue({ next, respond })
       .compile();
@@ -36,12 +40,12 @@ describe('Iclock HTTP', () => {
     respond.mockReset();
     next.mockResolvedValue(null);
     respond.mockResolvedValue(undefined);
-    createMany.mockReset();
+    createManyAndReturn.mockReset();
     upsert.mockReset();
     update.mockReset();
     upsert.mockResolvedValue({ id: 1, sn: 'ABC1234567890', enabled: true });
     update.mockResolvedValue({ id: 1 });
-    createMany.mockResolvedValue({ count: 1 });
+    createManyAndReturn.mockResolvedValue([{}]);
   });
 
   afterAll(async () => {
@@ -77,7 +81,7 @@ describe('Iclock HTTP', () => {
         body: line,
       });
       expect(response.status).toBe(400);
-      expect(createMany).not.toHaveBeenCalled();
+      expect(createManyAndReturn).not.toHaveBeenCalled();
     },
   );
 
@@ -91,7 +95,7 @@ describe('Iclock HTTP', () => {
     );
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('OK: 2');
-    expect(createMany).toHaveBeenCalledWith({
+    expect(createManyAndReturn).toHaveBeenCalledWith({
       data: [
         {
           deviceId: 1,
@@ -118,7 +122,7 @@ describe('Iclock HTTP', () => {
       );
       expect(response.status).toBe(200);
       expect(await response.text()).toBe(body ? 'OK: 1' : 'OK: 0');
-      expect(createMany).not.toHaveBeenCalled();
+      expect(createManyAndReturn).not.toHaveBeenCalled();
     },
   );
 
@@ -131,13 +135,13 @@ describe('Iclock HTTP', () => {
       },
     );
     expect(await response.text()).toBe('OK');
-    expect(createMany).not.toHaveBeenCalled();
+    expect(createManyAndReturn).not.toHaveBeenCalled();
   });
 
   it('waits for persistence before acknowledging the upload', async () => {
-    let finish!: (result: { count: number }) => void;
+    let finish!: (result: object[]) => void;
     let acknowledged = false;
-    createMany.mockReturnValue(
+    createManyAndReturn.mockReturnValue(
       new Promise((resolve) => {
         finish = resolve;
       }),
@@ -152,12 +156,12 @@ describe('Iclock HTTP', () => {
     while (!finish) await new Promise((resolve) => setTimeout(resolve, 5));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(acknowledged).toBe(false);
-    finish({ count: 1 });
+    finish([{}]);
     expect(await (await pending).text()).toBe('OK: 1');
   });
 
   it('returns plain text 500 on persistence failure without exposing database details', async () => {
-    createMany.mockRejectedValue(new Error('database connection details'));
+    createManyAndReturn.mockRejectedValue(new Error('database connection details'));
     const response = await fetch(
       `${baseUrl}/iclock/cdata?SN=ABC1234567890&table=ATTLOG`,
       {
@@ -187,7 +191,7 @@ describe('Iclock HTTP', () => {
     expect(response.status).toBe(403);
     expect(response.headers.get('content-type')).toContain('text/plain');
     expect(await response.text()).toBe('DEVICE DISABLED');
-    expect(createMany).not.toHaveBeenCalled();
+    expect(createManyAndReturn).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
     expect(respond).not.toHaveBeenCalled();
@@ -225,7 +229,7 @@ describe('Iclock HTTP', () => {
         faceCount: 12,
       },
     });
-    expect(createMany).not.toHaveBeenCalled();
+    expect(createManyAndReturn).not.toHaveBeenCalled();
   });
 
   it('returns 500 if registering the device fails', async () => {

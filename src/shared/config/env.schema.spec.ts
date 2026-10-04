@@ -57,3 +57,40 @@ describe('photo storage and API configuration', () => {
     expect(() => validateEnv({ ...config, API_KEY: undefined })).toThrow('API_KEY');
   });
 });
+
+describe('webhook configuration', () => {
+  const base = {
+    DATABASE_URL: 'postgresql://zk:zk@localhost/zk_push_test',
+    API_KEY: 'key',
+    PHOTO_STORAGE: '2',
+  };
+  it('accepts an empty pair and sets delivery defaults', () => {
+    const config = validateEnv({ ...base, WEBHOOK_URL: '', WEBHOOK_SECRET: '' });
+    expect(config.WEBHOOK_URL).toBeUndefined();
+    expect(config.WEBHOOK_TIMEOUT_MS).toBe(10000);
+    expect(config.WEBHOOK_POLL_INTERVAL_MS).toBe(1000);
+    expect(config.WEBHOOK_MAX_ATTEMPTS).toBe(10);
+  });
+  it.each([
+    { WEBHOOK_URL: 'https://example.com/webhook' },
+    { WEBHOOK_SECRET: 'secret' },
+    { WEBHOOK_URL: 'ftp://example.com/webhook', WEBHOOK_SECRET: 'secret' },
+    { WEBHOOK_URL: 'https://user:pass@example.com/webhook', WEBHOOK_SECRET: 'secret' },
+    { WEBHOOK_TIMEOUT_MS: '30001' },
+    { WEBHOOK_TIMEOUT_MS: '0' },
+    { WEBHOOK_MAX_ATTEMPTS: '101' },
+    { WEBHOOK_MAX_ATTEMPTS: '0' },
+    { WEBHOOK_POLL_INTERVAL_MS: '-1' },
+  ])('rejects invalid configuration %j', (change) => {
+    expect(() => validateEnv({ ...base, ...change })).toThrow();
+  });
+  it('accepts a complete HTTP(S) pair', () => {
+    expect(
+      validateEnv({
+        ...base,
+        WEBHOOK_URL: 'https://example.com/webhook',
+        WEBHOOK_SECRET: 'secret',
+      }).WEBHOOK_SECRET,
+    ).toBe('secret');
+  });
+});

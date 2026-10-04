@@ -1,3 +1,6 @@
+import type { Prisma } from '@prisma/client';
+import type { CommandState } from './domain/command';
+import { OutboxWriter } from '../webhooks/outbox.writer';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { DeviceDisabledError } from '../devices/device-disabled.error';
@@ -8,7 +11,10 @@ import type { CommandsRepository, CommandsTransaction } from './commands.reposit
 
 @Injectable()
 export class PrismaCommandsRepository implements CommandsRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly outbox: OutboxWriter,
+  ) {}
 
   withDeviceLock<T>(
     deviceId: number,
@@ -56,10 +62,7 @@ export class PrismaCommandsRepository implements CommandsRepository {
             if (state === 'failed') {
               const command = new Command(candidate);
               command.failBeforeSend();
-              await tx.command.update({
-                where: { id: candidate.id },
-                data: { ...command.snapshot, failureReason: 'Predecessor failed' },
-              });
+              await this.save(tx, candidate.id, command.snapshot, 'Predecessor failed');
               failed.add(candidate.id);
             }
           }
@@ -69,14 +72,9 @@ export class PrismaCommandsRepository implements CommandsRepository {
           const record = await tx.command.findUniqueOrThrow({ where: { id } });
           const command = new Command(record);
           if (!command.failBeforeSend()) return;
-          await tx.command.update({
-            where: { id },
-            data: { ...command.snapshot, failureReason: reason },
-          });
+          await this.save(tx, id, command.snapshot, reason);
         },
-        save: async (id, state) => {
-          await tx.command.update({ where: { id }, data: state });
-        },
+        save: (id, state, reason) => this.save(tx, id, state, reason),
         createAttempt: (commandId, number, sentAt, expiresAt) =>
           tx.commandAttempt.create({
             data: { commandId, number, sentAt, expiresAt },
@@ -99,5 +97,29 @@ export class PrismaCommandsRepository implements CommandsRepository {
       };
       return work(transaction);
     });
+  }
+  /** All final transitions and their events share the caller's device transaction. */
+  private async save(
+    tx: Prisma.TransactionClient,
+    id: number,
+    state: CommandState,
+    reason?: string,
+  ): Promise<void> {
+    const final = state.status === 'confirmed' || state.status === 'failed';
+    const previous = final
+      ? await tx.command.findUniqueOrThrow({ where: { id }, select: { status: true } })
+      : null;
+    await tx.command.update({
+      where: { id },
+      data: {
+        ...state,
+        ...(state.status === 'failed'
+          ? { failureReason: reason ?? 'Command failed' }
+          : {}),
+      },
+    });
+    if (previous && previous.status !== 'confirmed' && previous.status !== 'failed') {
+      await this.outbox.command(tx, id);
+    }
   }
 }

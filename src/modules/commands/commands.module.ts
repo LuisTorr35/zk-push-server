@@ -1,3 +1,4 @@
+import { OutboxModule } from '../webhooks/outbox.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '../../shared/config/config.module';
 import { PrismaModule } from '../../shared/prisma/prisma.module';
@@ -8,7 +9,7 @@ import { CommandPayloadRenderer } from './command-payload.renderer';
 import { CommandsService } from './commands.service';
 
 @Module({
-  imports: [ConfigModule, PrismaModule, StorageModule],
+  imports: [OutboxModule, ConfigModule, PrismaModule, StorageModule],
   providers: [
     CommandsService,
     CommandPayloadRenderer,
