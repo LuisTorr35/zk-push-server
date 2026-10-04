@@ -27,6 +27,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./test:/app/test
+      - ./tools:/app/tools
       # Migrations are created inside the container but must land in the repo
       - ./prisma:/app/prisma
     depends_on:
