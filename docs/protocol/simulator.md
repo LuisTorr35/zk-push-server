@@ -155,7 +155,7 @@ interrupted command remains queued/sent for the server to handle normally.
 With WEBHOOK_URL and WEBHOOK_SECRET configured, new attendance and final command
 results create outbox events. Run the webhook worker and inspect deliveries via
 `/api/webhooks/deliveries` using X-API-Key. Replaying an identical attendance
-batch produces no second event. See the [webhook guide](../../README.md#outgoing-webhooks)
+batch produces no second event. See the [webhook guide](../webhooks.md)
 for signing, receiver deduplication and configuration.
 
 The simulator integration launches the real CLI against an HTTP server with

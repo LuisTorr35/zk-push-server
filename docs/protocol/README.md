@@ -6,7 +6,7 @@ The server does not connect to the terminal. All examples use synthetic data.
 
 - [Configure a physical terminal](device-setup.md)
 - [Run the simulator and a complete enrollment flow](simulator.md)
-- [Consumer API and signed webhooks](../../README.md#outgoing-webhooks)
+- [Consumer API and signed webhooks](../webhooks.md)
 
 ## HTTP routes and supported data
 
@@ -210,5 +210,5 @@ can retransmit; previously committed identical attendance remains deduplicated.
 
 With webhooks enabled, `attendance.created`, `command.confirmed` and
 `command.failed` are queued in an outbox and delivered by a separate process.
-Requests themselves are not forwarded. See the [webhook contract](../../README.md#outgoing-webhooks)
+Requests themselves are not forwarded. See the [webhook contract](../webhooks.md)
 for signature verification, consumer deduplication and delivery retries.
